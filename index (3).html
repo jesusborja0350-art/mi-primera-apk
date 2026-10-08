@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Palmiyork</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap">
+<style>
+:root{--bg:#ffe45e;--ink:#1b1fd6;--card:#fffdf0;--soft:#6b6ef0;--f:"Bricolage Grotesque",system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);min-height:100vh;display:flex;justify-content:center;padding:max(20px,env(safe-area-inset-top)) 20px 40px}
+main{width:100%;max-width:440px;padding-top:10px}
+h1{font-size:clamp(44px,14vw,72px);line-height:.9;margin:0 0 8px;font-weight:800;letter-spacing:-.04em}
+.sub{font-size:18px;font-weight:500;margin:0 0 20px}
+.card{background:var(--card);border:3px solid var(--ink);border-radius:22px;padding:18px;box-shadow:6px 6px 0 var(--ink);margin-bottom:22px}
+.q{font-weight:800;font-size:20px;margin:0 0 12px}
+input,textarea{width:100%;border:0;border-bottom:3px solid var(--ink);outline:0;background:transparent;font:500 18px var(--f);color:var(--ink);padding:6px 0 8px;margin-bottom:14px}
+textarea{min-height:130px;resize:none;border:0;font-size:20px}
+input::placeholder,textarea::placeholder{color:var(--soft);opacity:.7}
+input:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.lbl{font-size:14px;font-weight:800;margin:0}
+button{font:800 17px var(--f);background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:13px 24px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+.ghost{background:transparent;color:var(--ink);border:3px solid var(--ink)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.err{color:#b3001b;font-size:14px;font-weight:500;min-height:18px;margin:0 4px 10px}
+.note{font-size:14px;font-weight:500;margin:0 4px 8px}
+a{color:var(--ink);font-weight:800}
+.link{word-break:break-all;background:var(--bg);border:3px solid var(--ink);border-radius:14px;padding:10px 12px;font-weight:500;font-size:14px;margin:0 0 12px}
+.msg{border-top:3px solid var(--ink);padding:12px 0}
+.msg:first-of-type{border-top:0}
+.msg .who{font-size:13px;font-weight:800;color:var(--soft);margin:0 0 4px}
+.msg .txt{font-size:19px;font-weight:500;margin:0 0 8px;white-space:pre-wrap;word-break:break-word}
+.msg button{font-size:13px;padding:6px 14px}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1>Palmiyork</h1>
+  <p class="sub" id="sub"></p>
+
+  <!-- ENVIAR (link de otra persona: ?u=usuario) -->
+  <section class="card hide" id="vSend">
+    <p class="q">Mándame un mensaje anónimo</p>
+    <p class="lbl">Tu nombre (no se verá 🤫)</p>
+    <input id="sName" maxlength="30" placeholder="Escribe tu nombre" autocomplete="off">
+    <textarea id="sMsg" maxlength="400" placeholder="Pregunta, confesión, chisme…"></textarea>
+    <div class="row"><span class="note" id="cnt">0/400</span><button id="sBtn" disabled>Enviar</button></div>
+  </section>
+  <section class="card hide" id="vSent" style="text-align:center">
+    <h2 style="font-size:34px;margin:0 0 6px">Mensaje enviado ✅</h2>
+    <p style="margin:0 0 16px;font-weight:500">Tu nombre sí me llegó 😈</p>
+    <button class="ghost" id="again">Mandar otro</button>
+  </section>
+
+  <!-- REGISTRO / ENTRAR -->
+  <section class="card hide" id="vAuth">
+    <p class="q" id="aTitle">Entrar</p>
+    <input id="aUser" placeholder="Usuario (sin espacios)" autocomplete="username" autocapitalize="none">
+    <input id="aPass" type="password" placeholder="Contraseña (mín. 6)" autocomplete="current-password">
+    <div class="row"><button id="aBtn">Entrar</button><button class="ghost" id="aSwap">Crear cuenta</button></div>
+  </section>
+
+  <!-- MI BANDEJA -->
+  <section class="hide" id="vInbox">
+    <div class="card">
+      <p class="q">Tu link para que te escriban</p>
+      <div class="link" id="myLink"></div>
+      <div class="row"><button id="copy">Copiar link</button><button class="ghost" id="out">Salir</button></div>
+    </div>
+    <div class="card"><p class="q">Tus mensajes</p><div id="list"><p class="note">Aún no tienes mensajes.</p></div></div>
+  </section>
+
+  <p class="err" id="err" role="alert"></p>
+  <p class="note hide" id="make"><a href="?">Crea el tuyo</a></p>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ===== PEGA AQUÍ TU CONFIG DE FIREBASE (líneas 78-82) =====
+const firebaseConfig = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  appId: "TU_APP_ID"
+};
+// ==========================================================
+
+const $ = id => document.getElementById(id), err = $("err");
+const show = (...ids) => ["vSend","vSent","vAuth","vInbox"].forEach(i => $(i).classList.toggle("hide", !ids.includes(i)));
+const base = location.origin + location.pathname;
+const clean = u => u.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth(), db = firebase.firestore();
+const Q = new URLSearchParams(location.search), target = clean(Q.get("u") || "");
+let unsub = null, last = 0, targetUid = null, registering = false;
+
+/* ---------- MODO ENVIAR ---------- */
+async function initSend() {
+  $("sub").textContent = "Escríbeme lo que quieras. Tu nombre no se verá. O eso dice aquí 😏";
+  $("make").classList.remove("hide");
+  try {
+    const d = await db.collection("usernames").doc(target).get();
+    if (!d.exists) { err.textContent = "Ese usuario no existe."; return; }
+    targetUid = d.data().uid; show("vSend");
+  } catch (e) { err.textContent = "No se pudo cargar la página."; }
+}
+function checkSend(){ $("cnt").textContent = $("sMsg").value.length + "/400"; $("sBtn").disabled = $("sMsg").value.trim().length < 2 || $("sName").value.trim().length < 2; }
+$("sMsg").oninput = $("sName").oninput = checkSend;
+$("sBtn").onclick = async () => {
+  err.textContent = "";
+  const wait = 20000 - (Date.now() - last);
+  if (wait > 0) { err.textContent = "Espera " + Math.ceil(wait/1000) + " s para enviar otro."; return; }
+  $("sBtn").disabled = true;
+  try {
+    await db.collection("users").doc(targetUid).collection("messages").add({
+      text: $("sMsg").value.trim(), name: $("sName").value.trim(), ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    last = Date.now(); $("sMsg").value = ""; $("sName").value = ""; checkSend(); show("vSent");
+  } catch (e) { err.textContent = "No se pudo enviar. Inténtalo de nuevo."; checkSend(); }
+};
+$("again").onclick = () => show("vSend");
+
+/* ---------- REGISTRO / ENTRAR ---------- */
+$("aSwap").onclick = () => {
+  registering = !registering; err.textContent = "";
+  $("aTitle").textContent = registering ? "Crear cuenta" : "Entrar";
+  $("aBtn").textContent = registering ? "Registrarme" : "Entrar";
+  $("aSwap").textContent = registering ? "Ya tengo cuenta" : "Crear cuenta";
+};
+$("aBtn").onclick = async () => {
+  err.textContent = "";
+  const u = clean($("aUser").value), p = $("aPass").value;
+  if (u.length < 3) { err.textContent = "El usuario debe tener 3 letras o más (solo letras, números y _)."; return; }
+  if (p.length < 6) { err.textContent = "La contraseña debe tener mínimo 6 caracteres."; return; }
+  $("aBtn").disabled = true;
+  try {
+    const email = u + "@palmiyork.app";
+    if (registering) {
+      if ((await db.collection("usernames").doc(u).get()).exists) throw { code: "taken" };
+      const c = await auth.createUserWithEmailAndPassword(email, p);
+      await db.collection("usernames").doc(u).set({ uid: c.user.uid });
+      await db.collection("users").doc(c.user.uid).set({ username: u });
+    } else await auth.signInWithEmailAndPassword(email, p);
+  } catch (e) {
+    const m = { taken: "Ese usuario ya existe.", "auth/email-already-in-use": "Ese usuario ya existe.",
+      "auth/invalid-credential": "Usuario o contraseña incorrectos.", "auth/wrong-password": "Usuario o contraseña incorrectos.",
+      "auth/user-not-found": "Usuario o contraseña incorrectos." };
+    err.textContent = m[e.code] || "No se pudo completar. Inténtalo de nuevo.";
+  }
+  $("aBtn").disabled = false;
+};
+
+/* ---------- BANDEJA ---------- */
+async function initInbox(user) {
+  const prof = await db.collection("users").doc(user.uid).get();
+  const uname = prof.exists ? prof.data().username : user.email.split("@")[0];
+  $("sub").textContent = "Hola, " + uname + " 👋 Comparte tu link y mira aquí lo que te escriben.";
+  $("myLink").textContent = base + "?u=" + uname;
+  show("vInbox");
+  unsub = db.collection("users").doc(user.uid).collection("messages").orderBy("ts", "desc").limit(100).onSnapshot(snap => {
+    const list = $("list"); list.textContent = "";
+    if (snap.empty) { list.innerHTML = '<p class="note">Aún no tienes mensajes.</p>'; return; }
+    snap.forEach(d => {
+      const m = d.data(), el = document.createElement("div"); el.className = "msg";
+      const w = document.createElement("p"); w.className = "who";
+      w.textContent = "De: " + (m.name || "?") + (m.ts ? " · " + m.ts.toDate().toLocaleString("es", { dateStyle: "short", timeStyle: "short" }) : "");
+      const t = document.createElement("p"); t.className = "txt"; t.textContent = m.text;
+      const b = document.createElement("button"); b.className = "ghost"; b.textContent = "Borrar";
+      b.onclick = () => d.ref.delete();
+      el.append(w, t, b); list.append(el);
+    });
+  }, () => { err.textContent = "No se pudieron cargar los mensajes."; });
+}
+$("copy").onclick = async e => {
+  try { await navigator.clipboard.writeText($("myLink").textContent); e.target.textContent = "Copiado ✅"; }
+  catch (x) { e.target.textContent = "Copia el link de arriba"; }
+};
+$("out").onclick = () => auth.signOut();
+
+/* ---------- ARRANQUE ---------- */
+if (target) initSend();
+else auth.onAuthStateChanged(u => {
+  if (unsub) { unsub(); unsub = null; }
+  err.textContent = "";
+  if (u) initInbox(u);
+  else { $("sub").textContent = "Recibe mensajes anónimos de tus amigos. Regístrate gratis."; show("vAuth"); }
+});
+</script>
+</body>
+</html>
